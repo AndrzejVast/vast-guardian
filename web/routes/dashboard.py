@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, jsonify
 import sqlite3
 
 dashboard = Blueprint("dashboard", __name__)
@@ -23,3 +23,30 @@ def index():
         "dashboard.html",
         hosts=hosts
     )
+@dashboard.route("/api/history")
+def history():
+
+    conn = sqlite3.connect("database/vast_guardian.db")
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT
+            created,
+            gpu_temp,
+            gpu_util,
+            cpu,
+            ram,
+            disk,
+            vram
+        FROM history
+        ORDER BY id DESC
+        LIMIT 100
+    """)
+
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+
+    rows.reverse()
+
+    return jsonify(rows)
