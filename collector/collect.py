@@ -44,7 +44,26 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
     docker,
     datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 ))
-
+cur.execute("""
+INSERT INTO history(
+    host_name,
+    gpu_temp,
+    gpu_util,
+    vram,
+    cpu,
+    ram,
+    disk
+)
+VALUES(?,?,?,?,?,?,?)
+""", (
+    "vastserver2",
+    int(gpu_temp),
+    int(gpu_util),
+    int(vram),
+    int(cpu),
+    int(ram),
+    int(disk)
+))
 conn.commit()
 conn.close()
 

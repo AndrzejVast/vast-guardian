@@ -24,7 +24,19 @@ CREATE TABLE IF NOT EXISTS events(
     created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 """)
-
+cur.execute("""
+CREATE TABLE IF NOT EXISTS history(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    host_name TEXT,
+    gpu_temp INTEGER,
+    gpu_util INTEGER,
+    vram INTEGER,
+    cpu INTEGER,
+    ram INTEGER,
+    disk INTEGER,
+    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+""")
 conn.commit()
 conn.close()
 
