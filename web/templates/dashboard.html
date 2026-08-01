@@ -142,7 +142,14 @@ margin-top:10px;
 <h2>Historia temperatury GPU</h2>
 
 <canvas id="gpuTempChart" height="80"></canvas>
+<h2>Historia użycia GPU</h2>
+<canvas id="gpuLoadChart" height="80"></canvas>
 
+<h2>Historia użycia CPU</h2>
+<canvas id="cpuChart" height="80"></canvas>
+
+<h2>Historia użycia RAM</h2>
+<canvas id="ramChart" height="80"></canvas>
 <script>
 fetch("/api/history")
 .then(r => r.json())
@@ -150,7 +157,9 @@ fetch("/api/history")
 
     const labels = data.map(x => x.created.substring(11,19));
     const temps = data.map(x => x.gpu_temp);
-
+const gpuLoad = data.map(x => x.gpu_util);
+const cpu = data.map(x => x.cpu);
+const ram = data.map(x => x.ram);
     new Chart(document.getElementById("gpuTempChart"), {
         type: "line",
         data: {
@@ -165,7 +174,50 @@ fetch("/api/history")
             responsive: true
         }
     });
+new Chart(document.getElementById("gpuLoadChart"), {
+    type: "line",
+    data: {
+        labels: labels,
+        datasets: [{
+            label: "GPU %",
+            data: gpuLoad,
+            tension: 0.3
+        }]
+    },
+    options: {
+        responsive: true
+    }
+});
 
+new Chart(document.getElementById("cpuChart"), {
+    type: "line",
+    data: {
+        labels: labels,
+        datasets: [{
+            label: "CPU %",
+            data: cpu,
+            tension: 0.3
+        }]
+    },
+    options: {
+        responsive: true
+    }
+});
+
+new Chart(document.getElementById("ramChart"), {
+    type: "line",
+    data: {
+        labels: labels,
+        datasets: [{
+            label: "RAM %",
+            data: ram,
+            tension: 0.3
+        }]
+    },
+    options: {
+        responsive: true
+    }
+});
 });
 </script>
 </body>
