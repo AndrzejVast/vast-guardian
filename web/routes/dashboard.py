@@ -50,3 +50,24 @@ def history():
     rows.reverse()
 
     return jsonify(rows)
+@dashboard.route("/api/status")
+def status():
+
+    conn = sqlite3.connect("database/vast_guardian.db")
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT *
+        FROM hosts
+        ORDER BY id DESC
+        LIMIT 1
+    """)
+
+    row = cur.fetchone()
+    conn.close()
+
+    if row:
+        return jsonify(dict(row))
+
+    return jsonify({})
