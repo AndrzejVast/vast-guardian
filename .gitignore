@@ -3,3 +3,4 @@ __pycache__/
 *.bak
 database/*.db
 logs/*.log
+system/__pycache__/
