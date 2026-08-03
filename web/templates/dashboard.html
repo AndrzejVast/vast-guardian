@@ -129,7 +129,43 @@ canvas{
     height:100%!important;
 
 }
+.health-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+    gap:15px;
+    margin-bottom:30px;
+}
 
+.health-card{
+    background:#1f2937;
+    border-radius:12px;
+    padding:18px;
+    text-align:center;
+    box-shadow:0 0 10px rgba(0,0,0,.35);
+}
+
+.health-title{
+    color:#9ca3af;
+    font-size:14px;
+    margin-bottom:10px;
+}
+
+.health-value{
+    font-size:24px;
+    font-weight:bold;
+}
+
+.green{
+    color:#22c55e;
+}
+
+.red{
+    color:#ef4444;
+}
+
+.orange{
+    color:#f59e0b;
+}
 
 
 </style>
@@ -147,9 +183,46 @@ canvas{
 
 
 
+<h2>Health Monitor</h2>
 
+<div class="health-grid">
+
+<div class="health-card">
+<div class="health-title">Guardian</div>
+<div id="health_guardian" class="health-value">...</div>
+</div>
+
+<div class="health-card">
+<div class="health-title">Docker</div>
+<div id="health_docker" class="health-value">...</div>
+</div>
+
+<div class="health-card">
+<div class="health-title">Vast.ai</div>
+<div id="health_vastai" class="health-value">...</div>
+</div>
+
+<div class="health-card">
+<div class="health-title">Internet</div>
+<div id="health_internet" class="health-value">...</div>
+</div>
+
+<div class="health-card">
+<div class="health-title">Dysk</div>
+<div id="health_disk" class="health-value">...</div>
+</div>
+
+<div class="health-card">
+<div class="health-title">Uptime</div>
+<div id="health_uptime" class="health-value">...</div>
+</div>
+
+</div>
 <div class="cards">
-
+<div class="card">
+    <h3>System</h3>
+    <p id="healthStatus">Checking...</p>
+</div>
 
 <div class="card">
 <h3>Host</h3>
@@ -588,26 +661,70 @@ console.log("Status error:",error);
 
 
 }
+function updateHealth(){
 
+    fetch("/api/health")
+    .then(r => r.json())
+    .then(h => {
 
+        const status = document.getElementById("healthStatus");
 
+        if(h.healthy){
+            status.innerHTML = "🟢 Healthy";
+            status.style.color = "#22c55e";
+        }else{
+            status.innerHTML = "🔴 " + h.count + " Problem(s)";
+            status.style.color = "#ef4444";
+        }
 
+        return fetch("/api/system");
 
+    })
+    .then(r => r.json())
+    .then(s => {
 
+        document.getElementById("health_guardian").innerHTML =
+            s.guardian == "active"
+            ? "<span style='color:#22c55e'>active</span>"
+            : "<span style='color:#ef4444'>" + s.guardian + "</span>";
+
+        document.getElementById("health_docker").innerHTML =
+            s.docker == "active"
+            ? "<span style='color:#22c55e'>active</span>"
+            : "<span style='color:#ef4444'>" + s.docker + "</span>";
+
+        document.getElementById("health_vastai").innerHTML =
+            s.vastai == "active"
+            ? "<span style='color:#22c55e'>active</span>"
+            : "<span style='color:#ef4444'>" + s.vastai + "</span>";
+
+        document.getElementById("health_internet").innerHTML =
+            s.internet == "online"
+            ? "<span style='color:#22c55e'>online</span>"
+            : "<span style='color:#ef4444'>offline</span>";
+
+        document.getElementById("health_disk").innerText =
+            s.disk + " %";
+
+        document.getElementById("health_uptime").innerText =
+            s.uptime;
+
+    })
+    .catch(error => {
+        console.log("Health error:", error);
+    });
+
+}
 
 // start
-
 updateCharts();
-
 updateStatus();
-
-
-
-// cykliczne odświeżanie
+updateHealth();
 
 setInterval(updateCharts,10000);
-
 setInterval(updateStatus,5000);
+setInterval(updateHealth,5000);
+
 
 
 

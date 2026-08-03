@@ -1,10 +1,15 @@
 from flask import Blueprint, render_template, jsonify
 import sqlite3
 
+from system.info import health_summary
+from system.info import health
+
 dashboard = Blueprint("dashboard", __name__)
+
 
 @dashboard.route("/")
 def index():
+
     conn = sqlite3.connect("database/vast_guardian.db")
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
@@ -23,6 +28,8 @@ def index():
         "dashboard.html",
         hosts=hosts
     )
+
+
 @dashboard.route("/api/history")
 def history():
 
@@ -50,6 +57,8 @@ def history():
     rows.reverse()
 
     return jsonify(rows)
+
+
 @dashboard.route("/api/status")
 def status():
 
@@ -71,3 +80,16 @@ def status():
         return jsonify(dict(row))
 
     return jsonify({})
+
+@dashboard.route("/api/health")
+def api_health():
+    return jsonify(
+        health_summary()
+    )
+
+
+@dashboard.route("/api/system")
+def api_system():
+    return jsonify(
+        health()
+    )
