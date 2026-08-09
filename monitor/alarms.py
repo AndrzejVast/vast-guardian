@@ -3,6 +3,7 @@
 import sqlite3
 
 from system.info import health
+from monitor.telegram import format_alarm, format_recovery, send_message
 
 
 GPU_WARNING = 80
@@ -116,7 +117,7 @@ def check_alarms():
 
 
 def record_alarm_state(result):
-    """Store only alarm state changes, not every dashboard poll."""
+    """Store only alarm state changes and notify Telegram once per change."""
 
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
@@ -146,6 +147,8 @@ def record_alarm_state(result):
         for row in cur.fetchall()
     }
 
+    notifications = []
+
     # New or changed alarms.
     for component, alarm in current.items():
         old = previous.get(component)
@@ -163,6 +166,7 @@ def record_alarm_state(result):
                 alarm["level"],
                 alarm["message"]
             ))
+            notifications.append(("alarm", alarm))
 
     # Alarms that disappeared are recovery events.
     for component, old in previous.items():
@@ -175,23 +179,17 @@ def record_alarm_state(result):
                 old["level"],
                 f"{component} returned to HEALTHY"
             ))
+            notifications.append(("recovery", component))
 
     conn.commit()
     conn.close()
 
-
-def alarm_history(limit=50):
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-
-    cur.execute("""
-        SELECT id, component, level, message, event, created
-        FROM alarm_history
-        ORDER BY id DESC
-        LIMIT ?
-    """, (limit,))
-
-    rows = [dict(row) for row in cur.fetchall()]
-    conn.close()
-    return rows
+    # Notifications are best-effort and must never stop the collector.
+    for kind, value in notifications:
+        try:
+            if kind == "alarm":
+                send_message(format_alarm(value))
+            else:
+                send_message(format_recovery(value))
+        except Exception as exc:
+            print(f"Telegram notification skipped: {exc}")
