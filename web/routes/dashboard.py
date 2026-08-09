@@ -3,6 +3,7 @@ import sqlite3
 
 from system.info import health_summary
 from system.info import health
+from monitor.alarms import check_alarms
 
 dashboard = Blueprint("dashboard", __name__)
 
@@ -87,9 +88,15 @@ def api_health():
         health_summary()
     )
 
-
 @dashboard.route("/api/system")
 def api_system():
     return jsonify(
         health()
+    )
+
+
+@dashboard.route("/api/alarms")
+def alarms():
+    return jsonify(
+        check_alarms()
     )
