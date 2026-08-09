@@ -1,0 +1,11 @@
+[Unit]
+Description=Vast Guardian Watchdog Check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/vast2/vast-guardian
+EnvironmentFile=/etc/vast-guardian/telegram.env
+ExecStart=/usr/bin/python3 /home/vast2/vast-guardian/watchdog/watchdog.py
