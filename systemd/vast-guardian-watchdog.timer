@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Vast Guardian Watchdog every minute
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=60s
+Unit=vast-guardian-watchdog.service
+
+[Install]
+WantedBy=timers.target
