@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS events(
     created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 """)
+
 cur.execute("""
 CREATE TABLE IF NOT EXISTS history(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,6 +38,18 @@ CREATE TABLE IF NOT EXISTS history(
     created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 """)
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS alarm_history(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    component TEXT NOT NULL,
+    level TEXT NOT NULL,
+    message TEXT NOT NULL,
+    event TEXT NOT NULL,
+    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+""")
+
 conn.commit()
 conn.close()
 
