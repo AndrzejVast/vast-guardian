@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import sqlite3
+
 from system.info import health
 
 
@@ -7,6 +9,7 @@ GPU_WARNING = 80
 GPU_CRITICAL = 90
 DISK_WARNING = 80
 DISK_CRITICAL = 90
+DB_PATH = "database/vast_guardian.db"
 
 
 def check_alarms():
@@ -48,19 +51,15 @@ def check_alarms():
 
     # GPU temperature
     try:
-
         gpu_temp = int(h["gpu_temp"])
 
         if gpu_temp >= GPU_CRITICAL:
-
             alarms.append({
                 "component": "GPU",
                 "level": "CRITICAL",
                 "message": f"GPU temperature is {gpu_temp}°C"
             })
-
         elif gpu_temp >= GPU_WARNING:
-
             alarms.append({
                 "component": "GPU",
                 "level": "WARNING",
@@ -72,19 +71,15 @@ def check_alarms():
 
     # Disk usage
     try:
-
         disk = int(h["disk"])
 
         if disk >= DISK_CRITICAL:
-
             alarms.append({
                 "component": "Disk",
                 "level": "CRITICAL",
                 "message": f"Disk usage is {disk}%"
             })
-
         elif disk >= DISK_WARNING:
-
             alarms.append({
                 "component": "Disk",
                 "level": "WARNING",
@@ -118,3 +113,85 @@ def check_alarms():
         "count": len(alarms),
         "alarms": alarms
     }
+
+
+def record_alarm_state(result):
+    """Store only alarm state changes, not every dashboard poll."""
+
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+
+    current = {
+        alarm["component"]: alarm
+        for alarm in result["alarms"]
+    }
+
+    cur.execute("""
+        SELECT component, level, message, event
+        FROM alarm_history
+        WHERE id IN (
+            SELECT MAX(id)
+            FROM alarm_history
+            WHERE event IN ('ACTIVE', 'RECOVERY')
+            GROUP BY component
+        )
+    """)
+
+    previous = {
+        row[0]: {
+            "level": row[1],
+            "message": row[2],
+            "event": row[3]
+        }
+        for row in cur.fetchall()
+    }
+
+    # New or changed alarms.
+    for component, alarm in current.items():
+        old = previous.get(component)
+        if (
+            old is None
+            or old["event"] == "RECOVERY"
+            or old["level"] != alarm["level"]
+            or old["message"] != alarm["message"]
+        ):
+            cur.execute("""
+                INSERT INTO alarm_history(component, level, message, event)
+                VALUES (?, ?, ?, 'ACTIVE')
+            """, (
+                component,
+                alarm["level"],
+                alarm["message"]
+            ))
+
+    # Alarms that disappeared are recovery events.
+    for component, old in previous.items():
+        if component not in current and old["event"] == "ACTIVE":
+            cur.execute("""
+                INSERT INTO alarm_history(component, level, message, event)
+                VALUES (?, ?, ?, 'RECOVERY')
+            """, (
+                component,
+                old["level"],
+                f"{component} returned to HEALTHY"
+            ))
+
+    conn.commit()
+    conn.close()
+
+
+def alarm_history(limit=50):
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT id, component, level, message, event, created
+        FROM alarm_history
+        ORDER BY id DESC
+        LIMIT ?
+    """, (limit,))
+
+    rows = [dict(row) for row in cur.fetchall()]
+    conn.close()
+    return rows
