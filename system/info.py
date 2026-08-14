@@ -57,14 +57,24 @@ def disk_usage():
 
 
 def internet():
-    try:
-        subprocess.check_output(
-            ["ping", "-c", "1", "-W", "2", "1.1.1.1"],
-            stderr=subprocess.DEVNULL
-        )
-        return "online"
-    except Exception:
-        return "offline"
+    """Return offline only after two failed rounds against two endpoints."""
+    targets = ("1.1.1.1", "8.8.8.8")
+
+    for _ in range(2):
+        for target in targets:
+            try:
+                subprocess.run(
+                    ["ping", "-c", "1", "-W", "1", target],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=True,
+                    timeout=2
+                )
+                return "online"
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+                continue
+
+    return "offline"
 
 
 def health():
