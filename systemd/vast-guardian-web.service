@@ -1,0 +1,15 @@
+[Unit]
+Description=Vast Guardian Web Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vast2
+WorkingDirectory=/home/vast2/vast-guardian
+ExecStart=/usr/bin/python3 -m web.app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -193,3 +193,22 @@ def record_alarm_state(result):
                 send_message(format_recovery(value))
         except Exception as exc:
             print(f"Telegram notification skipped: {exc}")
+
+
+def alarm_history(limit=50):
+    """Return the most recent persisted alarm state changes."""
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT id, component, level, message, event, created
+        FROM alarm_history
+        ORDER BY id DESC
+        LIMIT ?
+    """, (limit,))
+
+    rows = [dict(row) for row in cur.fetchall()]
+    conn.close()
+    return rows

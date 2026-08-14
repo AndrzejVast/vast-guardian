@@ -1,0 +1,11 @@
+[Unit]
+Description=Vast Guardian Daily Heartbeat
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=vast2
+WorkingDirectory=/home/vast2/vast-guardian
+EnvironmentFile=/etc/vast-guardian/telegram.env
+ExecStart=/usr/bin/python3 /home/vast2/vast-guardian/watchdog/heartbeat.py

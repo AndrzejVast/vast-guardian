@@ -1,0 +1,16 @@
+[Unit]
+Description=Vast Guardian Collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vast2
+WorkingDirectory=/home/vast2/vast-guardian
+EnvironmentFile=/etc/vast-guardian/telegram.env
+ExecStart=/usr/bin/python3 /home/vast2/vast-guardian/collector/loop.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

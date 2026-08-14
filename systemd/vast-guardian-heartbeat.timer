@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Vast Guardian Heartbeat daily
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+Unit=vast-guardian-heartbeat.service
+
+[Install]
+WantedBy=timers.target
