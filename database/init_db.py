@@ -68,6 +68,18 @@ def initialize_database(db_path=DEFAULT_DB_PATH):
     )
     """)
 
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS alarm_state(
+        id INTEGER PRIMARY KEY CHECK(id = 1),
+        status TEXT NOT NULL,
+        critical INTEGER NOT NULL,
+        warnings INTEGER NOT NULL,
+        count INTEGER NOT NULL,
+        alarms_json TEXT NOT NULL,
+        checked_at TIMESTAMP NOT NULL
+    )
+    """)
+
     conn.commit()
     conn.close()
 

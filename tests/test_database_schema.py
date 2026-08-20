@@ -30,6 +30,22 @@ class DatabaseSchemaTests(unittest.TestCase):
 
             self.assertEqual(columns, EXPECTED_HOSTS_COLUMNS)
 
+    def test_fresh_database_has_alarm_state_table(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            db_path = Path(temporary_directory) / "guardian.db"
+            initialize_database(db_path)
+
+            conn = sqlite3.connect(db_path)
+            try:
+                columns = [row[1] for row in conn.execute("PRAGMA table_info(alarm_state)")]
+            finally:
+                conn.close()
+
+            self.assertEqual(
+                columns,
+                ["id", "status", "critical", "warnings", "count", "alarms_json", "checked_at"],
+            )
+
     def test_migration_adds_missing_columns_and_preserves_rows(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             db_path = Path(temporary_directory) / "guardian.db"
@@ -59,6 +75,9 @@ class DatabaseSchemaTests(unittest.TestCase):
             try:
                 columns = [row[1] for row in conn.execute("PRAGMA table_info(hosts)")]
                 row_count = conn.execute("SELECT COUNT(*) FROM hosts").fetchone()[0]
+                alarm_state_exists = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'alarm_state'"
+                ).fetchone() is not None
             finally:
                 conn.close()
 
@@ -66,6 +85,7 @@ class DatabaseSchemaTests(unittest.TestCase):
             self.assertTrue(result["backup"].is_file())
             self.assertEqual(columns, EXPECTED_HOSTS_COLUMNS)
             self.assertEqual(row_count, 1)
+            self.assertTrue(alarm_state_exists)
             self.assertFalse(second_result["changed"])
             self.assertEqual(second_result["missing_columns"], [])
             self.assertIsNone(second_result["backup"])

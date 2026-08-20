@@ -20,10 +20,28 @@ HOSTS_COLUMNS = (
     ("disk", "INTEGER"),
     ("docker", "TEXT"),
 )
+ALARM_STATE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS alarm_state(
+    id INTEGER PRIMARY KEY CHECK(id = 1),
+    status TEXT NOT NULL,
+    critical INTEGER NOT NULL,
+    warnings INTEGER NOT NULL,
+    count INTEGER NOT NULL,
+    alarms_json TEXT NOT NULL,
+    checked_at TIMESTAMP NOT NULL
+)
+"""
 
 
 def table_columns(conn, table_name):
     return [row[1] for row in conn.execute(f"PRAGMA table_info({table_name})")]
+
+
+def table_exists(conn, table_name):
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table_name,),
+    ).fetchone() is not None
 
 
 def backup_database(db_path, backup_dir):
@@ -65,10 +83,13 @@ def migrate_database(db_path=DEFAULT_DB_PATH, backup_dir=None, dry_run=False):
             if name not in existing_columns
         ]
 
-        if dry_run or not missing_columns:
+        alarm_state_missing = not table_exists(conn, "alarm_state")
+
+        if dry_run or (not missing_columns and not alarm_state_missing):
             return {
                 "backup": None,
                 "missing_columns": [name for name, _ in missing_columns],
+                "alarm_state_missing": alarm_state_missing,
                 "changed": False,
             }
 
@@ -77,12 +98,15 @@ def migrate_database(db_path=DEFAULT_DB_PATH, backup_dir=None, dry_run=False):
             backup_path = backup_database(db_path, backup_dir)
             for name, column_type in missing_columns:
                 conn.execute(f"ALTER TABLE hosts ADD COLUMN {name} {column_type}")
+            conn.execute(ALARM_STATE_SCHEMA)
             final_columns = table_columns(conn, "hosts")
             still_missing = [name for name, _ in HOSTS_COLUMNS if name not in final_columns]
             if still_missing:
                 raise RuntimeError(
                     f"Migration incomplete; missing columns: {', '.join(still_missing)}"
                 )
+            if not table_exists(conn, "alarm_state"):
+                raise RuntimeError("Migration incomplete; alarm_state table is missing")
 
             integrity_result = conn.execute("PRAGMA integrity_check").fetchone()[0]
             if integrity_result != "ok":
@@ -95,6 +119,7 @@ def migrate_database(db_path=DEFAULT_DB_PATH, backup_dir=None, dry_run=False):
         return {
             "backup": backup_path,
             "missing_columns": [name for name, _ in missing_columns],
+            "alarm_state_missing": alarm_state_missing,
             "changed": True,
         }
     finally:
@@ -111,9 +136,14 @@ def main():
     result = migrate_database(args.database, args.backup_dir, args.dry_run)
     if result["changed"]:
         print(f"Backup created: {result['backup']}")
-        print("Added columns: " + ", ".join(result["missing_columns"]))
+        changes = list(result["missing_columns"])
+        if result["alarm_state_missing"]:
+            changes.append("alarm_state table")
+        print("Applied changes: " + ", ".join(changes))
     elif result["missing_columns"]:
         print("Dry run; columns to add: " + ", ".join(result["missing_columns"]))
+    elif result["alarm_state_missing"]:
+        print("Dry run; alarm_state table to create")
     else:
         print("Database schema is already up to date.")
 
