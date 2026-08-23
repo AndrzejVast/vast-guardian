@@ -18,6 +18,7 @@ DB_PATH = PROJECT_ROOT / "database" / "vast_guardian.db"
 STALE_AFTER_SECONDS = 90
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 FRESHNESS_STATE_KEY = "Collector Freshness"
+NOTIFIED_STATES_KEY = "Notified States"
 SERVICES = {
     "Guardian Collector": "vast-guardian",
     "Guardian Web": "vast-guardian-web",
@@ -103,16 +104,25 @@ def collector_freshness(now=None):
 def check():
     previous = load_state()
     current = {}
+    previous_notified = previous.get(NOTIFIED_STATES_KEY, {})
+    notified = dict(previous_notified) if isinstance(previous_notified, dict) else {}
 
     for name, service in SERVICES.items():
         ok = active(service)
         current[name] = ok
         was_ok = previous.get(name)
+        notification_key = f"service:{name}"
+        notified_ok = notified.get(notification_key, was_ok)
 
-        if was_ok is True and not ok:
-            send(f"🔴 Vast Guardian WATCHDOG\n{name} jest NIEAKTYWNY.")
-        elif was_ok is False and ok:
-            send(f"🟢 Vast Guardian WATCHDOG RECOVERY\n{name} działa ponownie.")
+        if was_ok is None:
+            # Preserve the existing watchdog behavior: no alert on its first run.
+            notified.setdefault(notification_key, ok)
+        elif not ok and notified_ok is not False:
+            if send(f"🔴 Vast Guardian WATCHDOG\n{name} jest NIEAKTYWNY."):
+                notified[notification_key] = False
+        elif ok and notified_ok is False:
+            if send(f"🟢 Vast Guardian WATCHDOG RECOVERY\n{name} działa ponownie."):
+                notified[notification_key] = True
 
     collector_active = current["Guardian Collector"]
     previous_freshness = previous.get(FRESHNESS_STATE_KEY)
@@ -124,20 +134,26 @@ def check():
                 current[FRESHNESS_STATE_KEY] = previous_freshness
         else:
             current[FRESHNESS_STATE_KEY] = freshness
-            if freshness == "STALE" and previous_freshness != "STALE":
-                send(
+            notified_freshness = notified.get(FRESHNESS_STATE_KEY, previous_freshness)
+            if freshness == "STALE" and notified_freshness != "STALE":
+                if send(
                     "🔴 Vast Guardian STALE COLLECTOR\n"
                     f"{reason}."
-                )
-            elif freshness == "FRESH" and previous_freshness == "STALE":
-                send(
+                ):
+                    notified[FRESHNESS_STATE_KEY] = "STALE"
+            elif freshness == "FRESH" and notified_freshness == "STALE":
+                if send(
                     "🟢 Vast Guardian STALE COLLECTOR RECOVERY\n"
                     "Collector zapisuje ponownie świeże dane."
-                )
+                ):
+                    notified[FRESHNESS_STATE_KEY] = "FRESH"
+            elif notified_freshness is None:
+                notified[FRESHNESS_STATE_KEY] = "FRESH"
     elif previous_freshness is not None:
         # A stopped service must not create a stale alert or erase freshness state.
         current[FRESHNESS_STATE_KEY] = previous_freshness
 
+    current[NOTIFIED_STATES_KEY] = notified
     save_state(current)
 
 
