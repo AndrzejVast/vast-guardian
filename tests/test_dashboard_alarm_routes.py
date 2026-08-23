@@ -133,7 +133,11 @@ class DashboardAlarmRouteTests(unittest.TestCase):
 
         self.assertIn(".charts-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))", contents)
         self.assertIn(".dashboard-shell{max-width:1680px}", contents)
-        self.assertIn("@media(min-width:601px){.dashboard-shell{max-width:1680px}.chart-box{height:320px}}", contents)
+        self.assertIn(".chart-box{height:320px}", contents)
+        self.assertIn(".dashboard-section,.alarms-panel,.history-panel{padding:18px;margin-bottom:16px}", contents)
+        self.assertIn(".section-heading{margin-bottom:14px}", contents)
+        self.assertIn(".card{padding:17px}", contents)
+        self.assertIn(".health-card{padding:14px}", contents)
         self.assertIn("maxTicksLimit:6", contents)
         self.assertIn("tooltip:{backgroundColor", contents)
         self.assertIn("pointRadius:showPoints?2:0", contents)
