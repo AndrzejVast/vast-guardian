@@ -85,6 +85,8 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("agent transport is not implemented; no systemd units will be installed or started", result.stdout)
         self.assertNotIn("vast-guardian-web.service", result.stdout)
         self.assertNotIn("database: initialize", result.stdout)
+        self.assertNotIn("test-token", result.stdout)
+        self.assertNotIn("test-token", result.stderr)
 
     def test_agent_requires_central_parameters(self):
         result = self.run_installer("--role", "agent", "--dry-run")

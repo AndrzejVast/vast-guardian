@@ -32,9 +32,14 @@ nadpisywany.
 
 ```bash
 sudo ./install.sh --role agent \
-  --central-url https://guardian.example.net/api/v1/ingest \
-  --ingest-token 'replace-with-secret'
+  --host-key vast-server \
+  --central-url https://guardian.example.net/api/v1/ingest
 ```
+
+Instalator zapyta interaktywnie o `Central ingest token` i odczyta go bez echo.
+Opcja `--ingest-token` pozostaje dostępna wyłącznie dla automatyzacji i testów;
+nie jest zalecana przy ręcznej instalacji, ponieważ argument może trafić do
+historii shell albo być chwilowo widoczny w `argv`.
 
 Tryb `agent` zapisuje wyłącznie konfigurację poza repozytorium. Transport
 agent → centrala nie jest jeszcze zaimplementowany, dlatego instalator celowo
