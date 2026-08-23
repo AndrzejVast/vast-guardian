@@ -1,0 +1,12 @@
+[Unit]
+Description=Vast Guardian Watchdog Check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=@REPO_PATH@
+EnvironmentFile=@ENV_FILE@
+EnvironmentFile=-/etc/vast-guardian/telegram.env
+ExecStart=/usr/bin/python3 @REPO_PATH@/watchdog/watchdog.py
