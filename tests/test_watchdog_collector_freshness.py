@@ -107,6 +107,22 @@ class CollectorFreshnessWatchdogTests(unittest.TestCase):
         self.assertEqual(state[watchdog.FRESHNESS_STATE_KEY], "STALE")
         self.assertEqual(state[watchdog.NOTIFIED_STATES_KEY][watchdog.FRESHNESS_STATE_KEY], "STALE")
 
+    def test_legacy_fresh_state_retries_failed_stale_alert(self):
+        self.write_state({
+            "Guardian Collector": True,
+            "Guardian Web": True,
+            watchdog.FRESHNESS_STATE_KEY: "FRESH",
+        })
+        self.insert_last_seen((NOW - timedelta(seconds=91)).strftime(watchdog.TIMESTAMP_FORMAT))
+
+        first_messages = self.run_check(send_results=[False])
+        second_messages = self.run_check(send_results=[True])
+        third_messages = self.run_check()
+
+        self.assertEqual(len(first_messages), 1)
+        self.assertEqual(len(second_messages), 1)
+        self.assertEqual(third_messages, [])
+
     def test_no_hosts_record_is_stale(self):
         messages = self.run_check()
 
@@ -152,6 +168,21 @@ class CollectorFreshnessWatchdogTests(unittest.TestCase):
             "FRESH",
         )
 
+    def test_legacy_stale_state_retries_failed_recovery(self):
+        self.write_state({
+            "Guardian Collector": True,
+            "Guardian Web": True,
+            watchdog.FRESHNESS_STATE_KEY: "STALE",
+        })
+        self.insert_last_seen((NOW - timedelta(seconds=10)).strftime(watchdog.TIMESTAMP_FORMAT))
+
+        first_messages = self.run_check(send_results=[False])
+        second_messages = self.run_check(send_results=[True])
+
+        self.assertEqual(len(first_messages), 1)
+        self.assertIn("STALE COLLECTOR RECOVERY", first_messages[0])
+        self.assertEqual(len(second_messages), 1)
+
     def test_inactive_collector_sends_only_service_alert_and_preserves_freshness(self):
         self.write_state({
             "Guardian Collector": True,
@@ -185,6 +216,19 @@ class CollectorFreshnessWatchdogTests(unittest.TestCase):
         self.assertEqual(state[watchdog.FRESHNESS_STATE_KEY], "FRESH")
         self.assertFalse(state[watchdog.NOTIFIED_STATES_KEY]["service:Guardian Collector"])
 
+    def test_legacy_service_active_state_retries_failed_inactive_alert(self):
+        self.write_state({
+            "Guardian Collector": True,
+            "Guardian Web": True,
+            watchdog.FRESHNESS_STATE_KEY: "FRESH",
+        })
+
+        first_messages = self.run_check(collector_active=False, send_results=[False])
+        second_messages = self.run_check(collector_active=False, send_results=[True])
+
+        self.assertEqual(len(first_messages), 1)
+        self.assertEqual(len(second_messages), 1)
+
     def test_service_return_with_fresh_data_sends_only_service_recovery(self):
         self.write_state({
             "Guardian Collector": False,
@@ -199,6 +243,21 @@ class CollectorFreshnessWatchdogTests(unittest.TestCase):
         self.assertIn("Guardian Collector działa ponownie", messages[0])
         self.assertNotIn("STALE COLLECTOR", messages[0])
         self.assertEqual(self.read_state()[watchdog.FRESHNESS_STATE_KEY], "FRESH")
+
+    def test_legacy_service_inactive_state_retries_failed_active_recovery(self):
+        self.write_state({
+            "Guardian Collector": False,
+            "Guardian Web": True,
+            watchdog.FRESHNESS_STATE_KEY: "FRESH",
+        })
+        self.insert_last_seen((NOW - timedelta(seconds=10)).strftime(watchdog.TIMESTAMP_FORMAT))
+
+        first_messages = self.run_check(collector_active=True, send_results=[False])
+        second_messages = self.run_check(collector_active=True, send_results=[True])
+
+        self.assertEqual(len(first_messages), 1)
+        self.assertIn("Guardian Collector działa ponownie", first_messages[0])
+        self.assertEqual(len(second_messages), 1)
 
     def test_service_return_with_stale_data_sends_service_recovery_and_stale_alert(self):
         self.write_state({

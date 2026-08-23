@@ -107,12 +107,21 @@ def check():
     previous_notified = previous.get(NOTIFIED_STATES_KEY, {})
     notified = dict(previous_notified) if isinstance(previous_notified, dict) else {}
 
+    # Old state files only stored observed states. Bootstrap their last known
+    # notification state once, then keep it independent from observed changes.
+    if NOTIFIED_STATES_KEY not in previous and previous:
+        for name in SERVICES:
+            if name in previous:
+                notified[f"service:{name}"] = previous[name]
+        if FRESHNESS_STATE_KEY in previous:
+            notified[FRESHNESS_STATE_KEY] = previous[FRESHNESS_STATE_KEY]
+
     for name, service in SERVICES.items():
         ok = active(service)
         current[name] = ok
         was_ok = previous.get(name)
         notification_key = f"service:{name}"
-        notified_ok = notified.get(notification_key, was_ok)
+        notified_ok = notified.get(notification_key)
 
         if was_ok is None:
             # Preserve the existing watchdog behavior: no alert on its first run.
@@ -134,7 +143,7 @@ def check():
                 current[FRESHNESS_STATE_KEY] = previous_freshness
         else:
             current[FRESHNESS_STATE_KEY] = freshness
-            notified_freshness = notified.get(FRESHNESS_STATE_KEY, previous_freshness)
+            notified_freshness = notified.get(FRESHNESS_STATE_KEY)
             if freshness == "STALE" and notified_freshness != "STALE":
                 if send(
                     "🔴 Vast Guardian STALE COLLECTOR\n"
