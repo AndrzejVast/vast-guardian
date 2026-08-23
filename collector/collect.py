@@ -16,6 +16,13 @@ def cmd(command):
     return subprocess.check_output(command, shell=True, text=True).strip()
 
 
+def service_state(service):
+    """Read systemd state without treating inactive as a collector failure."""
+    result = subprocess.run(["systemctl", "is-active", service], text=True, capture_output=True)
+    state = result.stdout.strip()
+    return state if state in {"active", "inactive", "failed"} else "unknown"
+
+
 def collect_metrics():
     """Read local metrics without writing a database or sending notifications."""
     return {
@@ -27,8 +34,8 @@ def collect_metrics():
         "cpu": int(cmd("top -bn1 | grep 'Cpu(s)' | awk '{print int($2+$4)}'")),
         "ram": int(cmd("free | awk '/Mem:/ {print int($3/$2*100)}'")),
         "disk": int(cmd("df / | awk 'NR==2 {print int($5)}' | tr -d '%'")),
-        "docker": cmd("systemctl is-active docker"),
-        "status": cmd("systemctl is-active vastai"),
+        "docker": service_state("docker"),
+        "status": service_state("vastai"),
     }
 
 

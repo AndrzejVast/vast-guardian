@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from collector import agent_loop
+from collector import agent_loop, collect
 
 
 class AgentTransportTests(unittest.TestCase):
@@ -25,3 +25,23 @@ class AgentTransportTests(unittest.TestCase):
         request = open_url.call_args.args[0]
         self.assertEqual(request.get_header("Authorization"), "Bearer secret")
         self.assertNotIn("context", open_url.call_args.kwargs)
+
+    def test_metric_collection_error_does_not_stop_next_cycle(self):
+        with patch.object(agent_loop, "agent_payload", side_effect=[RuntimeError("metrics failed"), {"report_id": "new"}]), \
+             patch.object(agent_loop, "send_report", return_value={}):
+            self.assertEqual(agent_loop.run_once(), (None, 0))
+            self.assertEqual(agent_loop.run_once(), (None, 0))
+
+    def test_abandoned_retry_uses_new_report_id_for_new_sample(self):
+        old = {"report_id": "old"}
+        fresh = {"report_id": "fresh"}
+        with patch.object(agent_loop, "send_report", side_effect=OSError("down")):
+            self.assertEqual(agent_loop.run_once(old, agent_loop.MAX_RETRIES - 1), (None, 0))
+        with patch.object(agent_loop, "agent_payload", return_value=fresh), patch.object(agent_loop, "send_report", return_value={}):
+            agent_loop.run_once()
+        self.assertNotEqual(old["report_id"], fresh["report_id"])
+
+    def test_inactive_docker_is_a_metric_value(self):
+        with patch("collector.collect.subprocess.run") as run:
+            run.return_value.stdout = "inactive\n"
+            self.assertEqual(collect.service_state("docker"), "inactive")

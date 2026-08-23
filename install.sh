@@ -18,6 +18,7 @@ ROLE=""
 HOST_KEY="${VAST_GUARDIAN_HOST_KEY:-}"
 CENTRAL_URL="${VAST_GUARDIAN_CENTRAL_URL:-}"
 INGEST_TOKEN="${VAST_GUARDIAN_INGEST_TOKEN:-}"
+ALLOW_INSECURE_HTTP="${VAST_GUARDIAN_ALLOW_INSECURE_HTTP:-0}"
 DRY_RUN=0
 ROLLBACK_NEEDED=0
 INSTALL_USER="${SUDO_USER:-$(id -un)}"
@@ -36,6 +37,7 @@ Options:
   --host-key KEY       Stable host identifier (default: local hostname).
   --central-url URL    Required configuration for an agent.
   --ingest-token TOKEN Required configuration for an agent; never printed.
+  --allow-insecure-http Permit http:// central URL for trusted LAN use only.
   --dry-run            Show the plan without modifying files or services.
   -h, --help           Show this help.
 EOF
@@ -91,6 +93,10 @@ parse_args() {
                 INGEST_TOKEN="$2"
                 shift 2
                 ;;
+            --allow-insecure-http)
+                ALLOW_INSECURE_HTTP=1
+                shift
+                ;;
             --dry-run)
                 DRY_RUN=1
                 shift
@@ -133,7 +139,13 @@ collect_agent_configuration() {
         printf '\n'
     fi
     [[ -n "$CENTRAL_URL" ]] || die "Agent role requires --central-url or VAST_GUARDIAN_CENTRAL_URL"
-    [[ "$CENTRAL_URL" == https://* ]] || die "Agent central URL must use https://"
+    if [[ "$CENTRAL_URL" == https://* ]]; then
+        :
+    elif [[ "$CENTRAL_URL" == http://* && "$ALLOW_INSECURE_HTTP" == "1" ]]; then
+        :
+    else
+        die "Agent central URL must use https:// (or http:// with --allow-insecure-http)"
+    fi
     [[ -n "$INGEST_TOKEN" ]] || die "Agent role requires --ingest-token or VAST_GUARDIAN_INGEST_TOKEN"
 }
 
@@ -181,6 +193,7 @@ show_plan() {
     else
         echo "  central URL: configured (value hidden)"
         echo "  ingest token: configured (value hidden)"
+        [[ "$ALLOW_INSECURE_HTTP" == "1" ]] && echo "  WARNING: agent will use insecure HTTP for a trusted LAN"
         echo "  systemd units: vast-guardian-agent.service only"
     fi
     if (( DRY_RUN )); then
@@ -207,6 +220,7 @@ write_environment_file() {
         printf 'VAST_GUARDIAN_HOST_KEY=%q\n' "$HOST_KEY"
         printf 'VAST_GUARDIAN_CENTRAL_URL=%q\n' "$CENTRAL_URL"
         printf 'VAST_GUARDIAN_INGEST_TOKEN=%q\n' "$INGEST_TOKEN"
+        printf 'VAST_GUARDIAN_ALLOW_INSECURE_HTTP=%q\n' "$ALLOW_INSECURE_HTTP"
         printf 'VAST_GUARDIAN_TELEGRAM_BOT_TOKEN=\n'
         printf 'VAST_GUARDIAN_TELEGRAM_CHAT_ID=\n'
     } > "$temporary_file"

@@ -27,7 +27,14 @@ def send_report(payload):
 
 
 def run_once(pending=None, attempts=0):
-    payload = pending or agent_payload()
+    if pending is None:
+        try:
+            payload = agent_payload()
+        except Exception as exc:
+            print(f"Agent metric collection failed: {exc}")
+            return None, 0
+    else:
+        payload = pending
     try:
         send_report(payload)
         return None, 0

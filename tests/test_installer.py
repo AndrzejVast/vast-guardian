@@ -94,6 +94,16 @@ class InstallerTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Agent role requires --central-url", result.stderr)
 
+    def test_agent_http_requires_flag_and_warns_when_enabled(self):
+        rejected = self.run_installer("--role", "agent", "--central-url", "http://lan/ingest", "--ingest-token", "secret", "--dry-run")
+        accepted = self.run_installer("--role", "agent", "--central-url", "http://lan/ingest", "--ingest-token", "secret", "--allow-insecure-http", "--dry-run")
+        other = self.run_installer("--role", "agent", "--central-url", "ftp://lan/ingest", "--ingest-token", "secret", "--dry-run")
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        self.assertIn("WARNING: agent will use insecure HTTP", accepted.stdout)
+        self.assertNotEqual(other.returncode, 0)
+        self.assertIn("VAST_GUARDIAN_ALLOW_INSECURE_HTTP", INSTALLER.read_text(encoding="utf-8"))
+
     def test_dry_run_is_idempotent(self):
         first = self.run_installer("--role", "central", "--host-key", "central-a", "--dry-run")
         second = self.run_installer("--role", "central", "--host-key", "central-a", "--dry-run")
