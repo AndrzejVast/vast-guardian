@@ -12,6 +12,7 @@ readonly LEGACY_TELEGRAM_ENV="${ETC_DIR}/telegram.env"
 readonly DB_PATH="${REPO_DIR}/database/vast_guardian.db"
 readonly PYTHON_BIN="${VAST_GUARDIAN_PYTHON:-python3}"
 readonly SYSTEMCTL_BIN="${VAST_GUARDIAN_SYSTEMCTL:-systemctl}"
+readonly TEST_MODE="${VAST_GUARDIAN_TEST_MODE:-0}"
 
 ROLE=""
 HOST_KEY="${VAST_GUARDIAN_HOST_KEY:-}"
@@ -144,8 +145,10 @@ preflight() {
     [[ "${VERSION_ID:-}" == "22.04" || "${VERSION_ID:-}" == "24.04" ]] || die "Only Ubuntu 22.04 and 24.04 are supported"
     require_command "$PYTHON_BIN"
     "$PYTHON_BIN" -c 'import sqlite3' || die "Python sqlite3 module is required"
-    require_command sqlite3
     require_command "$SYSTEMCTL_BIN"
+    if [[ "$TEST_MODE" != "1" ]]; then
+        id -u "$INSTALL_USER" >/dev/null 2>&1 || die "Service user does not exist: ${INSTALL_USER}"
+    fi
     require_file "${REPO_DIR}/database/init_db.py"
     require_file "${REPO_DIR}/database/migrate_db.py"
     require_file "${REPO_DIR}/config/guardian.env.example"
@@ -312,6 +315,17 @@ setup_central_database() {
         "$PYTHON_BIN" "${REPO_DIR}/database/migrate_db.py" \
             --database "$DB_PATH" --backup-dir "$DATA_DIR/backups"
     fi
+    ensure_database_ownership
+}
+
+ensure_database_ownership() {
+    [[ -f "$DB_PATH" ]] || die "Database was not created: ${DB_PATH}"
+    local database_file
+    for database_file in "$DB_PATH" "${DB_PATH}-wal" "${DB_PATH}-shm" "${DB_PATH}-journal"; do
+        [[ -e "$database_file" ]] || continue
+        chown "$INSTALL_USER" "$database_file"
+        chmod u+rw "$database_file"
+    done
 }
 
 main() {
@@ -325,7 +339,10 @@ main() {
     if (( DRY_RUN )); then
         return
     fi
-    [[ "${EUID}" -eq 0 ]] || die "Run the installer with sudo (or use --dry-run)"
+    if [[ "${EUID}" -ne 0 ]]; then
+        [[ "$TEST_MODE" == "1" ]] || die "Run the installer with sudo (or use --dry-run)"
+        [[ "$ETC_DIR" != "/etc/vast-guardian" && "$SYSTEMD_DIR" != "/etc/systemd/system" && "$DATA_DIR" != "/var/lib/vast-guardian" ]] || die "Test mode requires temporary installation directories"
+    fi
 
     trap rollback_units EXIT
     write_environment_file
