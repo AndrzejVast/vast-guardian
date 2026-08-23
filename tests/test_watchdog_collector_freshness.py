@@ -2,7 +2,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,7 +10,7 @@ from database.init_db import initialize_database
 from watchdog import watchdog
 
 
-NOW = datetime(2026, 8, 23, 12, 0, 0)
+NOW = datetime(2026, 8, 23, 12, 0, 0, tzinfo=timezone.utc)
 
 
 class CollectorFreshnessWatchdogTests(unittest.TestCase):
@@ -32,10 +32,10 @@ class CollectorFreshnessWatchdogTests(unittest.TestCase):
             path_patch.stop()
         self.temporary_directory.cleanup()
 
-    def insert_last_seen(self, value):
+    def insert_last_seen(self, value, host_key="vastserver2"):
         conn = sqlite3.connect(self.db_path)
         try:
-            conn.execute("INSERT INTO hosts(name, last_seen) VALUES ('host-a', ?)", (value,))
+            conn.execute("INSERT INTO hosts(name, last_seen) VALUES (?, ?)", (host_key, value))
             conn.commit()
         finally:
             conn.close()
@@ -127,7 +127,7 @@ class CollectorFreshnessWatchdogTests(unittest.TestCase):
         messages = self.run_check()
 
         self.assertEqual(len(messages), 1)
-        self.assertIn("No collector records", messages[0])
+        self.assertIn("No collector records for vastserver2", messages[0])
         self.assertEqual(self.read_state()[watchdog.FRESHNESS_STATE_KEY], "STALE")
 
     def test_stale_to_fresh_sends_one_recovery(self):
@@ -310,6 +310,60 @@ class CollectorFreshnessWatchdogTests(unittest.TestCase):
         database_uri = connect.call_args.args[0]
         self.assertIn("mode=ro", database_uri)
         self.assertTrue(connect.call_args.kwargs["uri"])
+
+    def test_utc_timestamp_age_does_not_use_local_timezone_offset(self):
+        self.insert_last_seen("2026-08-23 13:59:55")
+        now_utc = datetime(2026, 8, 23, 14, 0, 0, tzinfo=timezone.utc)
+
+        freshness, reason = watchdog.collector_freshness(now_utc)
+
+        self.assertEqual((freshness, reason), ("FRESH", None))
+
+    def test_fresh_remote_data_does_not_hide_stale_central_collector(self):
+        self.insert_last_seen((NOW - timedelta(seconds=5)).strftime(watchdog.TIMESTAMP_FORMAT), "vast-server")
+        self.insert_last_seen((NOW - timedelta(seconds=91)).strftime(watchdog.TIMESTAMP_FORMAT), "vastserver2")
+
+        messages = self.run_check()
+
+        self.assertEqual(len(messages), 1)
+        self.assertIn("STALE COLLECTOR", messages[0])
+        self.assertIn("91 seconds old", messages[0])
+
+    def test_stale_remote_data_does_not_mark_fresh_central_collector_stale(self):
+        self.insert_last_seen((NOW - timedelta(seconds=7200)).strftime(watchdog.TIMESTAMP_FORMAT), "vast-server")
+        self.insert_last_seen((NOW - timedelta(seconds=5)).strftime(watchdog.TIMESTAMP_FORMAT), "vastserver2")
+
+        messages = self.run_check()
+
+        self.assertEqual(messages, [])
+        self.assertEqual(self.read_state()[watchdog.FRESHNESS_STATE_KEY], "FRESH")
+
+    def test_stale_central_collector_sends_one_recovery_when_it_becomes_fresh(self):
+        self.write_state({
+            "Guardian Collector": True,
+            "Guardian Web": True,
+            watchdog.FRESHNESS_STATE_KEY: "STALE",
+            watchdog.NOTIFIED_STATES_KEY: {watchdog.FRESHNESS_STATE_KEY: "STALE"},
+        })
+        self.insert_last_seen((NOW - timedelta(seconds=91)).strftime(watchdog.TIMESTAMP_FORMAT), "vastserver2")
+        self.run_check()
+        self.insert_last_seen((NOW - timedelta(seconds=5)).strftime(watchdog.TIMESTAMP_FORMAT), "vastserver2")
+
+        first_messages = self.run_check()
+        second_messages = self.run_check()
+
+        self.assertEqual(len(first_messages), 1)
+        self.assertIn("STALE COLLECTOR RECOVERY", first_messages[0])
+        self.assertEqual(second_messages, [])
+
+    def test_configured_host_key_overrides_default_central_host(self):
+        self.insert_last_seen((NOW - timedelta(seconds=7200)).strftime(watchdog.TIMESTAMP_FORMAT), "vastserver2")
+        self.insert_last_seen((NOW - timedelta(seconds=5)).strftime(watchdog.TIMESTAMP_FORMAT), "central-alt")
+
+        with patch.dict(watchdog.os.environ, {"VAST_GUARDIAN_HOST_KEY": "central-alt"}):
+            freshness, reason = watchdog.collector_freshness(NOW)
+
+        self.assertEqual((freshness, reason), ("FRESH", None))
 
 
 if __name__ == "__main__":
