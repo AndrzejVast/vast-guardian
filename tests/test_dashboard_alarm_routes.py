@@ -114,6 +114,19 @@ class DashboardAlarmRouteTests(unittest.TestCase):
         self.assertIn('data.status==="UNKNOWN"', contents)
         self.assertIn("Brak wyniku sprawdzenia alarmów", contents)
 
+    def test_alarm_history_panel_is_compact_scrollable_and_expandable(self):
+        template = (Path(__file__).resolve().parent.parent / "web" / "templates" / "dashboard.html")
+        contents = template.read_text(encoding="utf-8")
+
+        self.assertIn("alarm-history-list{max-height:240px;overflow-y:auto", contents)
+        self.assertIn(".history-panel.expanded .alarm-history-list{max-height:520px}", contents)
+        self.assertIn("@media(max-width:600px)", contents)
+        self.assertIn('id="alarmHistoryToggle"', contents)
+        self.assertIn("Rozwiń", contents)
+        self.assertIn("Zwiń", contents)
+        self.assertIn("toggleAlarmHistory", contents)
+        self.assertIn("list.scrollTop=list.scrollHeight", contents)
+
     def _table_counts(self):
         conn = sqlite3.connect(self.db_path)
         try:
