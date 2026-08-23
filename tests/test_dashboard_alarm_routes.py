@@ -138,6 +138,16 @@ class DashboardAlarmRouteTests(unittest.TestCase):
         self.assertIn("pointRadius:showPoints?2:0", contents)
         self.assertIn("@media(max-width:900px)", contents)
 
+    def test_alarm_history_renders_recovery_independently_of_previous_level(self):
+        template = (Path(__file__).resolve().parent.parent / "web" / "templates" / "dashboard.html")
+        contents = template.read_text(encoding="utf-8")
+
+        self.assertIn('isRecovery=event.event==="RECOVERY"', contents)
+        self.assertIn('cls=isRecovery?"recovery":event.level.toLowerCase()', contents)
+        self.assertIn('eventName=isRecovery?"RECOVERY":event.level', contents)
+        self.assertIn(".alarm-history-item.recovery{border-left-color:var(--green)}", contents)
+        self.assertIn(".history-event.recovery{color:var(--green)}", contents)
+
     def _table_counts(self):
         conn = sqlite3.connect(self.db_path)
         try:
