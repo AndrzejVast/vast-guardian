@@ -132,7 +132,8 @@ class DashboardAlarmRouteTests(unittest.TestCase):
         contents = template.read_text(encoding="utf-8")
 
         self.assertIn(".charts-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))", contents)
-        self.assertIn(".chart-box{height:280px", contents)
+        self.assertIn(".dashboard-shell{max-width:1680px}", contents)
+        self.assertIn("@media(min-width:601px){.dashboard-shell{max-width:1680px}.chart-box{height:320px}}", contents)
         self.assertIn("maxTicksLimit:6", contents)
         self.assertIn("tooltip:{backgroundColor", contents)
         self.assertIn("pointRadius:showPoints?2:0", contents)
