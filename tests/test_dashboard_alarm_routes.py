@@ -127,6 +127,17 @@ class DashboardAlarmRouteTests(unittest.TestCase):
         self.assertIn("toggleAlarmHistory", contents)
         self.assertIn("list.scrollTop=list.scrollHeight", contents)
 
+    def test_frontend_uses_professional_responsive_chart_layout(self):
+        template = (Path(__file__).resolve().parent.parent / "web" / "templates" / "dashboard.html")
+        contents = template.read_text(encoding="utf-8")
+
+        self.assertIn(".charts-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))", contents)
+        self.assertIn(".chart-box{height:280px", contents)
+        self.assertIn("maxTicksLimit:6", contents)
+        self.assertIn("tooltip:{backgroundColor", contents)
+        self.assertIn("pointRadius:showPoints?2:0", contents)
+        self.assertIn("@media(max-width:900px)", contents)
+
     def _table_counts(self):
         conn = sqlite3.connect(self.db_path)
         try:
