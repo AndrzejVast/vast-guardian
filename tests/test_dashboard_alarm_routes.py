@@ -4,6 +4,7 @@ import sys
 import tempfile
 import types
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -30,6 +31,10 @@ class FakeFlask:
         pass
 
 
+def fake_abort(status_code):
+    raise RuntimeError(f"HTTP {status_code}")
+
+
 def load_dashboard_module():
     fake_flask = types.ModuleType("flask")
     fake_flask.Blueprint = FakeBlueprint
@@ -37,6 +42,7 @@ def load_dashboard_module():
     fake_flask.jsonify = lambda value: value
     fake_flask.render_template = lambda *args, **kwargs: {"args": args, "kwargs": kwargs}
     fake_flask.request = types.SimpleNamespace(headers={}, is_json=False)
+    fake_flask.abort = fake_abort
 
     for module_name in ("web.routes.dashboard", "web.routes", "web"):
         sys.modules.pop(module_name, None)
@@ -54,11 +60,42 @@ class DashboardAlarmRouteTests(unittest.TestCase):
         self.db_path = Path(self.temporary_directory.name) / "guardian.db"
         initialize_database(self.db_path)
         self.original_db_path = alarms.DB_PATH
+        self.original_dashboard_db_path = self.dashboard_module.DB_PATH
         alarms.DB_PATH = str(self.db_path)
+        self.dashboard_module.DB_PATH = self.db_path
 
     def tearDown(self):
         alarms.DB_PATH = self.original_db_path
+        self.dashboard_module.DB_PATH = self.original_dashboard_db_path
         self.temporary_directory.cleanup()
+
+    def insert_host(self, name, last_seen, **values):
+        columns = {"name": name, "last_seen": last_seen, **values}
+        placeholders = ", ".join("?" for _ in columns)
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                f"INSERT INTO hosts({', '.join(columns)}) VALUES ({placeholders})",
+                tuple(columns.values()),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def insert_history(self, host_name, created, gpu_temp):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.execute(
+                "INSERT INTO history(host_name, gpu_temp, created) VALUES (?, ?, ?)",
+                (host_name, gpu_temp, created),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def timestamp(seconds_ago=0):
+        return (datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)).strftime("%Y-%m-%d %H:%M:%S")
 
     def test_api_alarms_only_reads_current_state_and_preserves_contract(self):
         expected = {
@@ -153,6 +190,57 @@ class DashboardAlarmRouteTests(unittest.TestCase):
         self.assertIn('eventName=isRecovery?"RECOVERY":event.level', contents)
         self.assertIn(".alarm-history-item.recovery{border-left-color:var(--green)}", contents)
         self.assertIn(".history-event.recovery{color:var(--green)}", contents)
+
+    def test_hosts_endpoint_returns_unique_hosts_and_marks_stale_host(self):
+        self.insert_host("vastserver2", self.timestamp(5))
+        self.insert_host("vastserver2", self.timestamp(4))
+        self.insert_host("test-host", self.timestamp(120))
+
+        response = self.dashboard_module.hosts()
+
+        self.assertEqual([host["host_key"] for host in response], ["test-host", "vastserver2"])
+        self.assertFalse(response[0]["online"])
+        self.assertTrue(response[1]["online"])
+
+    def test_host_status_and_history_are_scoped_to_selected_host(self):
+        self.insert_host("vastserver2", self.timestamp(5), gpu="central")
+        self.insert_host("vast-server", self.timestamp(5), gpu="remote")
+        self.insert_history("vastserver2", "2026-08-23 12:00:00", 70)
+        self.insert_history("vast-server", "2026-08-23 12:00:01", 80)
+
+        status = self.dashboard_module.host_status("vast-server")
+        history = self.dashboard_module.host_history("vast-server")
+
+        self.assertEqual(status["name"], "vast-server")
+        self.assertEqual(status["gpu"], "remote")
+        self.assertEqual(history, [{"created": "2026-08-23 12:00:01", "gpu_temp": 80,
+                                    "gpu_util": None, "cpu": None, "ram": None,
+                                    "disk": None, "vram": None}])
+
+    def test_invalid_host_returns_not_found(self):
+        with self.assertRaisesRegex(RuntimeError, "HTTP 404"):
+            self.dashboard_module.host_status("missing")
+        with self.assertRaisesRegex(RuntimeError, "HTTP 404"):
+            self.dashboard_module.host_history("missing")
+
+    def test_legacy_status_and_history_endpoints_remain_available(self):
+        self.insert_host("vastserver2", self.timestamp(5), gpu="central")
+        self.insert_history("vastserver2", "2026-08-23 12:00:00", 70)
+
+        self.assertEqual(self.dashboard_module.status()["name"], "vastserver2")
+        self.assertEqual(len(self.dashboard_module.history()), 1)
+
+    def test_frontend_uses_host_specific_endpoints_and_preserves_default(self):
+        template = Path(__file__).resolve().parent.parent / "web" / "templates" / "dashboard.html"
+        contents = template.read_text(encoding="utf-8")
+
+        self.assertIn('id="hostSelector"', contents)
+        self.assertIn('fetch("/api/v1/hosts")', contents)
+        self.assertIn('hostEndpoint("/status")', contents)
+        self.assertIn('hostEndpoint("/history")', contents)
+        self.assertIn('host.host_key==="vastserver2"', contents)
+        self.assertIn('localStorage.getItem("vastGuardianSelectedHost")', contents)
+        self.assertIn('data.freshness', contents)
 
     def _table_counts(self):
         conn = sqlite3.connect(self.db_path)
