@@ -159,6 +159,8 @@ preflight() {
             vast-guardian-heartbeat.service.in vast-guardian-heartbeat.timer; do
             require_file "${REPO_DIR}/systemd/${unit}"
         done
+    else
+        require_file "${REPO_DIR}/systemd/vast-guardian-agent.service.in"
     fi
 }
 
@@ -179,7 +181,7 @@ show_plan() {
     else
         echo "  central URL: configured (value hidden)"
         echo "  ingest token: configured (value hidden)"
-        echo "  agent transport is not implemented; no systemd units will be installed or started"
+        echo "  systemd units: vast-guardian-agent.service only"
     fi
     if (( DRY_RUN )); then
         echo "  mode: DRY-RUN — no files, database, or services will change"
@@ -272,6 +274,28 @@ install_central_units() {
     ROLLBACK_DIR=""
 }
 
+install_agent_unit() {
+    if (( DRY_RUN )); then
+        note "Would render and install vast-guardian-agent.service in ${SYSTEMD_DIR}"
+        return
+    fi
+    ROLLBACK_DIR="$(mktemp -d)"
+    ROLLBACK_NEEDED=1
+    render_unit "${REPO_DIR}/systemd/vast-guardian-agent.service.in" "${SYSTEMD_DIR}/vast-guardian-agent.service"
+    "$SYSTEMCTL_BIN" daemon-reload
+    if ! "$SYSTEMCTL_BIN" is-enabled --quiet vast-guardian-agent.service; then
+        "$SYSTEMCTL_BIN" enable vast-guardian-agent.service
+        ENABLED_UNITS+=("vast-guardian-agent.service")
+    fi
+    if ! "$SYSTEMCTL_BIN" is-active --quiet vast-guardian-agent.service; then
+        "$SYSTEMCTL_BIN" start vast-guardian-agent.service
+        STARTED_UNITS+=("vast-guardian-agent.service")
+    fi
+    ROLLBACK_NEEDED=0
+    rm -rf "$ROLLBACK_DIR"
+    ROLLBACK_DIR=""
+}
+
 rollback_units() {
     local status="$?"
     if (( ROLLBACK_NEEDED )); then
@@ -350,7 +374,7 @@ main() {
         setup_central_database
         install_central_units
     else
-        note "Agent configuration prepared. No collector service was started because central ingest transport is not implemented."
+        install_agent_unit
     fi
     trap - EXIT
     echo "Installation completed for role: ${ROLE}"

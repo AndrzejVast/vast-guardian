@@ -1,0 +1,16 @@
+[Unit]
+Description=Vast Guardian Agent Reporter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@GUARDIAN_USER@
+WorkingDirectory=@REPO_PATH@
+EnvironmentFile=@ENV_FILE@
+ExecStart=/usr/bin/python3 -m collector.agent_loop
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

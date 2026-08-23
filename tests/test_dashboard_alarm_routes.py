@@ -36,6 +36,7 @@ def load_dashboard_module():
     fake_flask.Flask = FakeFlask
     fake_flask.jsonify = lambda value: value
     fake_flask.render_template = lambda *args, **kwargs: {"args": args, "kwargs": kwargs}
+    fake_flask.request = types.SimpleNamespace(headers={}, is_json=False)
 
     for module_name in ("web.routes.dashboard", "web.routes", "web"):
         sys.modules.pop(module_name, None)

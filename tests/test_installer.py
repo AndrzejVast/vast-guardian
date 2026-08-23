@@ -82,7 +82,7 @@ class InstallerTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("agent transport is not implemented; no systemd units will be installed or started", result.stdout)
+        self.assertIn("vast-guardian-agent.service only", result.stdout)
         self.assertNotIn("vast-guardian-web.service", result.stdout)
         self.assertNotIn("database: initialize", result.stdout)
         self.assertNotIn("test-token", result.stdout)

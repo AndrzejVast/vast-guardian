@@ -80,6 +80,14 @@ def initialize_database(db_path=DEFAULT_DB_PATH):
     )
     """)
 
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS ingest_reports(
+        report_id TEXT PRIMARY KEY,
+        host_key TEXT NOT NULL,
+        received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     conn.commit()
     conn.close()
 
