@@ -7,7 +7,7 @@ import subprocess
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 ENV_TOKEN = os.getenv("VAST_GUARDIAN_TELEGRAM_BOT_TOKEN", "").strip()
@@ -17,6 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = PROJECT_ROOT / "database" / "vast_guardian.db"
 STALE_AFTER_SECONDS = 90
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+DEFAULT_LOCAL_HOST_KEY = "vastserver2"
 FRESHNESS_STATE_KEY = "Collector Freshness"
 NOTIFIED_STATES_KEY = "Notified States"
 SERVICES = {
@@ -66,11 +67,22 @@ def save_state(state):
     os.replace(tmp, STATE_PATH)
 
 
+def monitored_host_key():
+    """Return the central collector host key, independent of remote agents."""
+    return os.getenv("VAST_GUARDIAN_HOST_KEY", "").strip() or DEFAULT_LOCAL_HOST_KEY
+
+
 def collector_freshness(now=None):
-    """Return (FRESH|STALE, reason) from the latest collector database write."""
+    """Return (FRESH|STALE, reason) for the local collector's latest DB write."""
 
     if now is None:
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    else:
+        now = now.astimezone(timezone.utc)
+
+    host_key = monitored_host_key()
 
     try:
         database_uri = f"{DB_PATH.resolve().as_uri()}?mode=ro"
@@ -79,23 +91,24 @@ def collector_freshness(now=None):
             row = conn.execute("""
                 SELECT last_seen
                 FROM hosts
+                WHERE name = ?
                 ORDER BY id DESC
                 LIMIT 1
-            """).fetchone()
+            """, (host_key,)).fetchone()
         finally:
             conn.close()
     except sqlite3.Error as exc:
         return None, f"SQLite read failed: {exc}"
 
     if row is None:
-        return "STALE", "No collector records in hosts"
+        return "STALE", f"No collector records for {host_key}"
 
     try:
-        last_seen = datetime.strptime(row[0], TIMESTAMP_FORMAT)
+        last_seen = datetime.strptime(row[0], TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
     except (TypeError, ValueError):
         return None, f"Invalid last_seen value: {row[0]!r}"
 
-    age_seconds = (now - last_seen).total_seconds()
+    age_seconds = max(0, (now - last_seen).total_seconds())
     if age_seconds > STALE_AFTER_SECONDS:
         return "STALE", f"Last collector data is {int(age_seconds)} seconds old"
     return "FRESH", None
